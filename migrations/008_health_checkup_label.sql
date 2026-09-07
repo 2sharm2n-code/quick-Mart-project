@@ -1,0 +1,1 @@
+UPDATE cost_items SET name = 'Pre-Employment Health Checkup', description = 'Standard pre-employment medical health checkup to confirm fitness for work before onboarding.' WHERE name = 'Mandatory Hygiene Clearance';
