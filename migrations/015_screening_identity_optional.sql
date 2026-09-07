@@ -1,0 +1,1 @@
+ALTER TABLE applicants ALTER COLUMN national_id DROP NOT NULL;
