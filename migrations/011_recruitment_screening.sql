@@ -1,0 +1,11 @@
+ALTER TABLE applicants ADD COLUMN IF NOT EXISTS recruitment_stage text NOT NULL DEFAULT 'application_received';
+ALTER TABLE applicants ADD COLUMN IF NOT EXISTS screening_score integer;
+ALTER TABLE applicants ADD COLUMN IF NOT EXISTS screening_notes text;
+ALTER TABLE applicants ADD COLUMN IF NOT EXISTS screened_at timestamptz;
+ALTER TABLE applicants ADD COLUMN IF NOT EXISTS screening_decision text;
+ALTER TABLE applicants ADD COLUMN IF NOT EXISTS interview_date date;
+ALTER TABLE applicants ADD COLUMN IF NOT EXISTS interview_time text;
+ALTER TABLE applicants ADD COLUMN IF NOT EXISTS interview_score integer;
+ALTER TABLE applicants ADD COLUMN IF NOT EXISTS verification_status text NOT NULL DEFAULT 'not_started';
+ALTER TABLE applicants ADD COLUMN IF NOT EXISTS hr_notes text;
+CREATE INDEX IF NOT EXISTS applicants_recruitment_stage_idx ON applicants(recruitment_stage);
