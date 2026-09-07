@@ -1,0 +1,1 @@
+ALTER TABLE applicants ADD COLUMN IF NOT EXISTS appointment_date date, ADD COLUMN IF NOT EXISTS appointment_time text, ADD COLUMN IF NOT EXISTS appointment_instructions text, ADD COLUMN IF NOT EXISTS appointment_updated_at timestamptz;
