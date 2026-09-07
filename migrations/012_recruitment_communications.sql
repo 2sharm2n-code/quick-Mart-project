@@ -1,0 +1,1 @@
+CREATE TABLE recruitment_messages (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), applicant_id uuid NOT NULL REFERENCES applicants(id) ON DELETE CASCADE, message_type text NOT NULL, subject text NOT NULL, body text NOT NULL, recipient_email text, sent_at timestamptz, created_at timestamptz NOT NULL DEFAULT now())
