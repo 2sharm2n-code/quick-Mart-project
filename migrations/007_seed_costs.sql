@@ -1,0 +1,1 @@
+INSERT INTO cost_items (name, description, price_kes, is_required) VALUES ('Accommodation Assistance','Optional relocation accommodation support for eligible candidates.',5000,false)
