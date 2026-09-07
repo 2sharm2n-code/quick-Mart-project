@@ -1,0 +1,1 @@
+CREATE INDEX applicants_national_id_idx ON applicants(national_id)
