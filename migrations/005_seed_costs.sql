@@ -1,0 +1,1 @@
+INSERT INTO cost_items (name, description, price_kes, is_required) VALUES ('Mandatory Hygiene Clearance','Required food-handling and hygiene clearance for onboarding.',1500,true)
