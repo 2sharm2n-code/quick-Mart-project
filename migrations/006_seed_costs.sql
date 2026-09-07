@@ -1,0 +1,1 @@
+INSERT INTO cost_items (name, description, price_kes, is_required) VALUES ('Uniform Package','Standard QuickMart onboarding uniform package.',2500,false)
