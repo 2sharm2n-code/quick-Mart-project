@@ -1,0 +1,1 @@
+ALTER TABLE applicants ADD COLUMN IF NOT EXISTS paid_at timestamptz;
