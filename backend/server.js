@@ -69,6 +69,29 @@ app.get('/api/applications', async (req, res) => {
   }
 });
 
+// Route: Update Application Status
+app.patch('/api/applications/:id/status', async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  const validStatuses = ['Pending', 'Reviewed', 'Interview', 'Rejected', 'Hired'];
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
+
+  try {
+    const result = await pool.query(
+      'UPDATE applications SET status = $1 WHERE id = $2 RETURNING *',
+      [status, id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Application not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Initialize DB Schema on startup (Helper)
 const initDB = async () => {
   const schemaPath = path.join(__dirname, 'sql/schema.sql');
