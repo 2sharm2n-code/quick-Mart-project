@@ -1,133 +1,41 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard - Quick Mart</title>
-    <link rel="stylesheet" href="style.css">
-    <style>
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background-color: var(--primary-color); color: white; }
-        .status-pending { color: orange; font-weight: bold; }
-        .status-reviewed { color: blue; font-weight: bold; }
-        .status-interview { color: #7c3aed; font-weight: bold; }
-        .status-rejected { color: #dc2626; font-weight: bold; }
-        .status-hired { color: green; font-weight: bold; }
-        .status-select { padding: 7px 9px; border: 1px solid #ccc; border-radius: 5px; background: white; font: inherit; }
-        .status-select:disabled { opacity: 0.6; cursor: wait; }
-    </style>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Dashboard - Quick Mart</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.table-wrap{overflow-x:auto}table{width:100%;min-width:1100px;border-collapse:collapse;margin-top:20px;background:#fff}th,td{padding:12px;text-align:left;border-bottom:1px solid #ddd}th{background:var(--primary-color);color:#fff}.stage-select,.status-select,input,button{padding:7px 9px;border:1px solid #ccc;border-radius:5px;font:inherit}.badge{display:inline-block;padding:5px 9px;border-radius:999px;font-weight:700;font-size:.85rem}.paid{background:#dcfce7;color:#166534}.pending{background:#fee2e2;color:#991b1b}.failed{background:#fee2e2;color:#991b1b}.btn{cursor:pointer}.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:20px}.modal.open{display:flex}.modal-card{background:#fff;border-radius:12px;padding:22px;width:min(480px,100%)}.modal-card label{display:block;margin:12px 0 6px;font-weight:600}.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}.status-note{font-size:.85rem;color:#666}
+</style>
 </head>
 <body>
-    <header>
-        <div class="container">
-            <h1>Quick Mart Admin Dashboard</h1>
-            <a href="index.html" class="back-link">← Back to Public Site</a>
-        </div>
-    </header>
-
-    <main class="container">
-        <h2>All Applications</h2>
-        <div id="admin-content">
-            <table id="applications-table">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Job ID</th>
-                        <th>Candidate</th>
-                        <th>Email</th>
-                        <th>Status</th>
-                        <th>Resume</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Rows will be added here -->
-                </tbody>
-            </table>
-            <p id="loading-msg">Loading applications...</p>
-        </div>
-    </main>
-
-    <script>
-        const API_URL = '/api';
-
-        function statusClass(status) {
-            return `status-${String(status || '').toLowerCase()}`;
-        }
-
-        async function updateApplicationStatus(id, select) {
-            const previousStatus = select.dataset.previousStatus || select.value;
-            const newStatus = select.value;
-            select.disabled = true;
-
-            try {
-                const response = await fetch(`${API_URL}/applications/${encodeURIComponent(id)}/status`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: newStatus })
-                });
-
-                const result = await response.json();
-                if (!response.ok) throw new Error(result.error || 'Failed to update status');
-
-                select.dataset.previousStatus = result.status;
-                select.className = `status-select ${statusClass(result.status)}`;
-            } catch (error) {
-                console.error(error);
-                select.value = previousStatus;
-                select.className = `status-select ${statusClass(previousStatus)}`;
-                alert(`Could not update application status: ${error.message}`);
-            } finally {
-                select.disabled = false;
-            }
-        }
-
-        async function loadApplications() {
-            try {
-                const response = await fetch(`${API_URL}/applications`);
-                if (!response.ok) throw new Error('Failed to fetch applications');
-
-                const apps = await response.json();
-                const tbody = document.querySelector('#applications-table tbody');
-                document.getElementById('loading-msg').style.display = 'none';
-
-                if (apps.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6">No applications found.</td></tr>';
-                    return;
-                }
-
-                apps.forEach(app => {
-                    const row = document.createElement('tr');
-                    const date = new Date(app.applied_date).toLocaleDateString();
-                    const currentStatus = app.status || 'Pending';
-                    const safeId = String(app.id).replace(/'/g, '&#39;');
-
-                    row.innerHTML = `
-                        <td>${date}</td>
-                        <td>${app.job_id}</td>
-                        <td>${app.full_name}</td>
-                        <td>${app.email}</td>
-                        <td>
-                            <select class="status-select ${statusClass(currentStatus)}" data-previous-status="${currentStatus}" aria-label="Application status for ${app.full_name}" onchange="updateApplicationStatus('${safeId}', this)">
-                                <option value="Pending" ${currentStatus === 'Pending' ? 'selected' : ''}>Pending</option>
-                                <option value="Reviewed" ${currentStatus === 'Reviewed' ? 'selected' : ''}>Reviewed</option>
-                                <option value="Interview" ${currentStatus === 'Interview' ? 'selected' : ''}>Interview</option>
-                                <option value="Rejected" ${currentStatus === 'Rejected' ? 'selected' : ''}>Rejected</option>
-                                <option value="Hired" ${currentStatus === 'Hired' ? 'selected' : ''}>Hired</option>
-                            </select>
-                        </td>
-                        <td><a href="${app.resume_link}" target="_blank" rel="noopener noreferrer">View</a></td>
-                    `;
-                    tbody.appendChild(row);
-                });
-            } catch (error) {
-                console.error(error);
-                document.getElementById('loading-msg').innerText = 'Error loading data. Is server running?';
-                document.getElementById('loading-msg').style.color = 'red';
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', loadApplications);
-    </script>
-</body>
-</html>
+<header><div class="container"><h1>Quick Mart Admin Dashboard</h1><a href="index.html" class="back-link">← Back to Public Site</a></div></header>
+<main class="container">
+<h2>Recruitment Applications</h2>
+<p class="status-note">Manage recruitment stage, payment status, and interview appointments from one dashboard.</p>
+<div class="table-wrap"><table id="applications-table"><thead><tr><th>Date</th><th>Application</th><th>Candidate</th><th>Email</th><th>Job</th><th>Current Stage</th><th>Payment Status</th><th>Last Interview</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
+<p id="loading-msg">Loading applications...</p>
+</main>
+<div id="interview-modal" class="modal"><div class="modal-card"><h2>Schedule Interview</h2><p id="interview-candidate"></p><form id="interview-form"><input type="hidden" id="interview-application-id"><label for="interviewer">Interviewer</label><input id="interviewer" required placeholder="HR / Hiring Manager"><label for="interview-type">Interview type</label><select id="interview-type"><option>In-person</option><option>Phone</option><option>Video</option></select><label for="scheduled-time">Scheduled time</label><input id="scheduled-time" type="datetime-local" required><label for="duration">Duration (minutes)</label><input id="duration" type="number" min="15" value="60"><label for="meeting-link">Meeting link (optional)</label><input id="meeting-link" type="url" placeholder="https://..."><div class="modal-actions"><button type="button" class="btn" onclick="closeInterviewModal()">Cancel</button><button type="submit" class="btn">Schedule Interview</button></div></form></div></div>
+<script>
+const API_URL='/api';
+const stageOptions=['Applied','Screening','Interview','Offer','Hired','Rejected'];
+function esc(value){const d=document.createElement('div');d.textContent=value??'';return d.innerHTML;}
+function paymentClass(status){return String(status||'Pending').toLowerCase()==='completed'?'paid':String(status||'Pending').toLowerCase()==='failed'?'failed':'pending';}
+function fmtDate(value){return value?new Date(value).toLocaleString(): '—';}
+async function updateStage(id, select){
+  const old=select.dataset.old||select.value;select.disabled=true;
+  try{const r=await fetch(`${API_URL}/applications/${encodeURIComponent(id)}/stage`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({stage:select.value})});const data=await r.json();if(!r.ok)throw new Error(data.error||'Update failed');select.dataset.old=data.current_stage;await loadApplications();}
+  catch(e){select.value=old;alert(e.message);}finally{select.disabled=false;}
+}
+function openInterviewModal(id,name){document.getElementById('interview-application-id').value=id;document.getElementById('interview-candidate').textContent=`Candidate: ${name}`;document.getElementById('interview-modal').classList.add('open');}
+function closeInterviewModal(){document.getElementById('interview-modal').classList.remove('open');document.getElementById('interview-form').reset();}
+document.getElementById('interview-form').addEventListener('submit',async e=>{e.preventDefault();const payload={application_id:Number(document.getElementById('interview-application-id').value),interviewer_name:document.getElementById('interviewer').value,interview_type:document.getElementById('interview-type').value,scheduled_time:document.getElementById('scheduled-time').value,duration_minutes:Number(document.getElementById('duration').value),meeting_link:document.getElementById('meeting-link').value||null};try{const r=await fetch(`${API_URL}/interviews`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await r.json();if(!r.ok)throw new Error(data.error||'Could not schedule interview');closeInterviewModal();await loadApplications();alert('Interview scheduled successfully.');}catch(err){alert(err.message);}});
+async function loadApplications(){
+ const loading=document.getElementById('loading-msg'),tbody=document.querySelector('#applications-table tbody');loading.style.display='block';
+ try{const r=await fetch(`${API_URL}/applications`);if(!r.ok)throw new Error('Failed to fetch applications');const apps=await r.json();tbody.innerHTML='';loading.style.display='none';if(!apps.length){tbody.innerHTML='<tr><td colspan="9">No applications found.</td></tr>';return;}
+ apps.forEach(app=>{const stage=app.current_stage||'Applied';const payment=app.payment_status||'Pending';const row=document.createElement('tr');row.innerHTML=`<td>${esc(fmtDate(app.applied_date))}</td><td><strong>${esc(app.lookup_code||('#'+app.id))}</strong></td><td>${esc(app.full_name)}</td><td>${esc(app.email)}</td><td>${esc(app.job_title||app.job_id)}</td><td><select class="stage-select" data-old="${esc(stage)}" onchange="updateStage(${Number(app.id)},this)">${stageOptions.map(s=>`<option ${s===stage?'selected':''}>${s}</option>`).join('')}</select></td><td><span class="badge ${paymentClass(payment)}">${esc(payment)}</span></td><td>${esc(fmtDate(app.last_interview))}</td><td><button class="btn" onclick="openInterviewModal(${Number(app.id)},'${String(app.full_name||'').replace(/'/g,"\\'")}')">Schedule Interview</button></td>`;tbody.appendChild(row);});}
+ catch(e){console.error(e);loading.textContent='Error loading data. Is the server running?';loading.style.color='red';}}
+document.addEventListener('DOMContentLoaded',loadApplications);window.addEventListener('click',e=>{if(e.target.id==='interview-modal')closeInterviewModal();});
+</script>
+</body></html>
