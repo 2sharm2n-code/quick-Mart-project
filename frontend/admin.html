@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Quick Mart</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: var(--primary-color); color: white; }
+        .status-pending { color: orange; font-weight: bold; }
+        .status-reviewed { color: blue; font-weight: bold; }
+        .status-hired { color: green; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Quick Mart Admin Dashboard</h1>
+            <a href="index.html" class="back-link">← Back to Public Site</a>
+        </div>
+    </header>
+
+    <main class="container">
+        <h2>All Applications</h2>
+        <div id="admin-content">
+            <table id="applications-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Job ID</th>
+                        <th>Candidate</th>
+                        <th>Email</th>
+                        <th>Status</th>
+                        <th>Resume</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Rows will be added here -->
+                </tbody>
+            </table>
+            <p id="loading-msg">Loading applications...</p>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = '/api';
+
+        async function loadApplications() {
+            try {
+                const response = await fetch(`${API_URL}/applications`);
+                if (!response.ok) throw new Error('Failed to fetch applications');
+                
+                const apps = await response.json();
+                const tbody = document.querySelector('#applications-table tbody');
+                document.getElementById('loading-msg').style.display = 'none';
+
+                if (apps.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6">No applications found.</td></tr>';
+                    return;
+                }
+
+                apps.forEach(app => {
+                    const row = document.createElement('tr');
+                    const date = new Date(app.applied_date).toLocaleDateString();
+                    const statusClass = `status-${app.status.toLowerCase()}`;
+                    
+                    row.innerHTML = `
+                        <td>${date}</td>
+                        <td>${app.job_id}</td>
+                        <td>${app.full_name}</td>
+                        <td>${app.email}</td>
+                        <td class="${statusClass}">${app.status}</td>
+                        <td><a href="${app.resume_link}" target="_blank">View</a></td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                console.error(error);
+                document.getElementById('loading-msg').innerText = 'Error loading data. Is server running?';
+                document.getElementById('loading-msg').style.color = 'red';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadApplications);
+    </script>
+</body>
+</html>
