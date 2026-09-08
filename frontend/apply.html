@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apply - Quick Mart</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Quick Mart Careers</h1>
+            <a href="index.html" class="back-link">← Back to Jobs</a>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="form-container">
+            <h2 id="job-title">Apply for Position</h2>
+            <form id="application-form">
+                <input type="hidden" id="job-id">
+                
+                <label for="full_name">Full Name</label>
+                <input type="text" id="full_name" required placeholder="John Doe">
+
+                <label for="email">Email Address</label>
+                <input type="email" id="email" required placeholder="john@example.com">
+
+                <label for="phone">Phone Number</label>
+                <input type="tel" id="phone" placeholder="(123) 456-7890">
+
+                <label for="resume_link">Resume Link (Google Drive/Dropbox)</label>
+                <input type="url" id="resume_link" placeholder="https://..." required>
+
+                <label for="cover_letter">Cover Letter</label>
+                <textarea id="cover_letter" rows="5" placeholder="Tell us why you're a great fit..."></textarea>
+
+                <button type="submit">Submit Application</button>
+            </form>
+            <div id="message"></div>
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const jobId = params.get('id');
+            const jobTitle = params.get('title');
+
+            if (jobId && jobTitle) {
+                document.getElementById('job-id').value = jobId;
+                document.getElementById('job-title').innerText = `Apply for: ${jobTitle}`;
+            } else {
+                document.getElementById('job-title').innerText = 'Select a Job First';
+                document.querySelector('form').style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
