@@ -33,7 +33,7 @@ async function loadJobs() {
                     <span>💼 ${job.type}</span>
                 </div>
                 <p>${job.description.substring(0, 100)}...</p>
-                <a href="apply.html?id=${job.id}&title=${encodeURIComponent(job.title)}" class="btn-apply">Apply Now</a>
+                <a href="job-details.html?id=${job.id}" class="btn-apply">View Job Details</a>
             `;
             jobList.appendChild(card);
         });
