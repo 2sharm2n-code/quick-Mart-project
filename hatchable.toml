@@ -1,0 +1,31 @@
+name = "QuickMart Kenya Recruitment & Onboarding"
+
+[[secret]]
+key = "PAYSTACK_LIVE_SECRET_KEY"
+required = true
+expose = false
+description = "Paystack live secret key for production Kenya M-PESA payments."
+
+[[secret]]
+key = "PAYSTACK_LIVE_PUBLIC_KEY"
+required = false
+expose = false
+description = "Paystack live public key for production client-side integrations."
+
+[[secret]]
+key = "GOOGLE_GMAIL_CLIENT_ID"
+required = true
+expose = true
+description = "Google OAuth client ID used by QuickMart to authorize Gmail sending."
+
+[[secret]]
+key = "GOOGLE_GMAIL_CLIENT_SECRET"
+required = true
+expose = true
+description = "Google OAuth client secret used server-side for the QuickMart Gmail connection."
+
+[[secret]]
+key = "GOOGLE_GMAIL_ENCRYPTION_KEY"
+required = true
+expose = true
+description = "Random secret used to encrypt stored Google Gmail OAuth tokens. Use a long random value."
