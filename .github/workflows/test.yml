@@ -1,0 +1,62 @@
+name: QuickMart Test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: quick_mart_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d quick_mart_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DB_USER: postgres
+      DB_HOST: localhost
+      DB_NAME: quick_mart_db
+      DB_PASSWORD: postgres
+      DB_PORT: 5432
+      PORT: 3000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm install
+      - name: Syntax check server
+        run: node --check backend/server.js
+      - name: Syntax check frontend script
+        run: node --check frontend/script.js
+      - name: Start server
+        run: node backend/server.js > server.log 2>&1 &
+      - name: Wait for API
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:3000/api/jobs >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          cat server.log
+          exit 1
+      - name: Smoke test jobs and lookup
+        run: |
+          curl -fsS http://127.0.0.1:3000/api/jobs
+          curl -fsS http://127.0.0.1:3000/api/jobs/1
+          curl -fsS http://127.0.0.1:3000/api/applications
+      - name: Show server log on failure
+        if: failure()
+        run: cat server.log
