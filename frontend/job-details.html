@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Details - Quick Mart</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Quick Mart Careers</h1>
+            <a href="index.html" class="back-link">← Back to Jobs</a>
+        </div>
+    </header>
+
+    <main class="container">
+        <div id="job-detail-container" class="form-container">
+            <h2 id="detail-title">Loading...</h2>
+            <p id="detail-meta" style="color: #666; font-style: italic;"></p>
+            <hr>
+            <div id="detail-description" style="line-height: 1.6; white-space: pre-wrap;"></div>
+
+            <div style="margin-top: 30px; text-align: center;">
+                <a id="apply-btn" href="#" class="btn-apply">Apply for this Job</a>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = '/api';
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const params = new URLSearchParams(window.location.search);
+            const jobId = params.get('id');
+
+            if (!jobId) {
+                document.getElementById('detail-title').innerText = 'Job not found';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/jobs/${jobId}`);
+                if (!response.ok) throw new Error('Job not found');
+
+                const job = await response.json();
+
+                document.getElementById('detail-title').innerText = job.title;
+                document.getElementById('detail-meta').innerText = `${job.location} | ${job.type} | Posted: ${new Date(job.posted_date).toLocaleDateString()}`;
+                document.getElementById('detail-description').innerText = job.description;
+
+                const applyBtn = document.getElementById('apply-btn');
+                applyBtn.href = `apply.html?id=${job.id}&title=${encodeURIComponent(job.title)}`;
+
+            } catch (error) {
+                document.getElementById('detail-title').innerText = 'Error loading job details.';
+                console.error(error);
+            }
+        });
+    </script>
+</body>
+</html>
