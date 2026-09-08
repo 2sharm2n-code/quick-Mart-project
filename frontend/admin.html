@@ -11,7 +11,11 @@
         th { background-color: var(--primary-color); color: white; }
         .status-pending { color: orange; font-weight: bold; }
         .status-reviewed { color: blue; font-weight: bold; }
+        .status-interview { color: #7c3aed; font-weight: bold; }
+        .status-rejected { color: #dc2626; font-weight: bold; }
         .status-hired { color: green; font-weight: bold; }
+        .status-select { padding: 7px 9px; border: 1px solid #ccc; border-radius: 5px; background: white; font: inherit; }
+        .status-select:disabled { opacity: 0.6; cursor: wait; }
     </style>
 </head>
 <body>
@@ -47,11 +51,42 @@
     <script>
         const API_URL = '/api';
 
+        function statusClass(status) {
+            return `status-${String(status || '').toLowerCase()}`;
+        }
+
+        async function updateApplicationStatus(id, select) {
+            const previousStatus = select.dataset.previousStatus || select.value;
+            const newStatus = select.value;
+            select.disabled = true;
+
+            try {
+                const response = await fetch(`${API_URL}/applications/${encodeURIComponent(id)}/status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus })
+                });
+
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Failed to update status');
+
+                select.dataset.previousStatus = result.status;
+                select.className = `status-select ${statusClass(result.status)}`;
+            } catch (error) {
+                console.error(error);
+                select.value = previousStatus;
+                select.className = `status-select ${statusClass(previousStatus)}`;
+                alert(`Could not update application status: ${error.message}`);
+            } finally {
+                select.disabled = false;
+            }
+        }
+
         async function loadApplications() {
             try {
                 const response = await fetch(`${API_URL}/applications`);
                 if (!response.ok) throw new Error('Failed to fetch applications');
-                
+
                 const apps = await response.json();
                 const tbody = document.querySelector('#applications-table tbody');
                 document.getElementById('loading-msg').style.display = 'none';
@@ -64,15 +99,24 @@
                 apps.forEach(app => {
                     const row = document.createElement('tr');
                     const date = new Date(app.applied_date).toLocaleDateString();
-                    const statusClass = `status-${app.status.toLowerCase()}`;
-                    
+                    const currentStatus = app.status || 'Pending';
+                    const safeId = String(app.id).replace(/'/g, '&#39;');
+
                     row.innerHTML = `
                         <td>${date}</td>
                         <td>${app.job_id}</td>
                         <td>${app.full_name}</td>
                         <td>${app.email}</td>
-                        <td class="${statusClass}">${app.status}</td>
-                        <td><a href="${app.resume_link}" target="_blank">View</a></td>
+                        <td>
+                            <select class="status-select ${statusClass(currentStatus)}" data-previous-status="${currentStatus}" aria-label="Application status for ${app.full_name}" onchange="updateApplicationStatus('${safeId}', this)">
+                                <option value="Pending" ${currentStatus === 'Pending' ? 'selected' : ''}>Pending</option>
+                                <option value="Reviewed" ${currentStatus === 'Reviewed' ? 'selected' : ''}>Reviewed</option>
+                                <option value="Interview" ${currentStatus === 'Interview' ? 'selected' : ''}>Interview</option>
+                                <option value="Rejected" ${currentStatus === 'Rejected' ? 'selected' : ''}>Rejected</option>
+                                <option value="Hired" ${currentStatus === 'Hired' ? 'selected' : ''}>Hired</option>
+                            </select>
+                        </td>
+                        <td><a href="${app.resume_link}" target="_blank" rel="noopener noreferrer">View</a></td>
                     `;
                     tbody.appendChild(row);
                 });
