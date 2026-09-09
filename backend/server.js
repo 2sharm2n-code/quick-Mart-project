@@ -38,7 +38,7 @@ async function recordStage(client, applicationId, previousStage, nextStage, reas
     VALUES ($1,$2,'Completed',$3,$4,$5,NOW())`,
     [applicationId, nextStage, previousStage || null, triggeredBy, reason || null]);
   await client.query(`UPDATE applications
-    SET progress_log = COALESCE(progress_log,'[]'::jsonb) || jsonb_build_object('stage',$1,'from',$2,'at',NOW(),'reason',$3)
+    SET progress_log = COALESCE(progress_log,'[]'::jsonb) || jsonb_build_object('stage',$1::text,'from',$2::text,'at',NOW(),'reason',$3::text)
     WHERE id=$4`, [nextStage, previousStage || null, reason || null, applicationId]);
 }
 
