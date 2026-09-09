@@ -73,16 +73,20 @@ jobs:
             -H 'Content-Type: application/json' \
             -d '{"job_id":1,"full_name":"CI Test Candidate","email":"ci-test@example.com","phone":"0712345678","resume_link":"","cover_letter":"CI smoke test"}')
           echo "$RESPONSE"
-          CODE=$(node -e "const x=JSON.parse(process.argv[1]); if(!x.lookup_code) process.exit(1); process.stdout.write(x.lookup_code)" "$RESPONSE")
+          CODE=$(RESPONSE_JSON="$RESPONSE" node -e "const x=JSON.parse(process.env.RESPONSE_JSON); if(!x.data?.lookup_code) process.exit(1); process.stdout.write(x.data.lookup_code)")
           echo "Lookup code: $CODE"
-          curl -fsS "http://127.0.0.1:3000/api/lookup/$CODE"
+          LOOKUP=$(curl -fsS "http://127.0.0.1:3000/api/lookup/$CODE")
+          echo "$LOOKUP"
+          LOOKUP_JSON="$LOOKUP" node -e "const x=JSON.parse(process.env.LOOKUP_JSON); if(x.current_stage !== 'Applied' || !x.full_name) process.exit(1)"
 
       - name: Test stage update
         run: |
-          ID=$(curl -fsS http://127.0.0.1:3000/api/applications | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const x=JSON.parse(s);if(!x.applications?.[0]?.id)process.exit(1);process.stdout.write(String(x.applications[0].id));})")
-          curl -fsS -X PATCH "http://127.0.0.1:3000/api/applications/$ID/stage" \
+          ID=$(curl -fsS http://127.0.0.1:3000/api/applications | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const x=JSON.parse(s);if(!x[0]?.id)process.exit(1);process.stdout.write(String(x[0].id));})")
+          RESPONSE=$(curl -fsS -X PATCH "http://127.0.0.1:3000/api/applications/$ID/stage" \
             -H 'Content-Type: application/json' \
-            -d '{"stage":"Screening"}'
+            -d '{"stage":"Screening"}')
+          echo "$RESPONSE"
+          STAGE_JSON="$RESPONSE" node -e "const x=JSON.parse(process.env.STAGE_JSON); if(x.current_stage !== 'Screening') process.exit(1)"
 
       - name: Show server log on failure
         if: failure()
