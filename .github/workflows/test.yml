@@ -48,6 +48,7 @@ jobs:
         run: |
           node --check backend/server.js
           node --check frontend/script.js
+          node --check frontend/portal.js
       - name: Start server
         run: node backend/server.js > server.log 2>&1 &
       - name: Wait for API
@@ -71,11 +72,15 @@ jobs:
           echo "$RESPONSE"
           ID=$(RESPONSE_JSON="$RESPONSE" node -e "const x=JSON.parse(process.env.RESPONSE_JSON);if(x.data?.current_stage!=='Applied'||!x.data?.lookup_code)process.exit(1);process.stdout.write(String(x.data.id))")
           CODE=$(RESPONSE_JSON="$RESPONSE" node -e "process.stdout.write(JSON.parse(process.env.RESPONSE_JSON).lookup_code)")
+          PORTAL=$(curl -fsS "http://127.0.0.1:3000/portal/$CODE")
+          echo "$PORTAL" | grep -q 'QuickMart Applicant Portal'
           LOOKUP=$(curl -fsS "http://127.0.0.1:3000/api/lookup/$CODE")
-          LOOKUP_JSON="$LOOKUP" node -e "const x=JSON.parse(process.env.LOOKUP_JSON);if(x.current_stage!=='Applied')process.exit(1)"
+          LOOKUP_JSON="$LOOKUP" node -e "const x=JSON.parse(process.env.LOOKUP_JSON);if(x.current_stage!=='Applied'||x.stage!=='Applied'||!Array.isArray(x.data_payload?.screening_questions)||x.data_payload.screening_questions.length<1||x.is_complete)process.exit(1)"
 
           SCREEN=$(curl -fsS -X POST "http://127.0.0.1:3000/api/applications/$ID/screening" -H 'Content-Type: application/json' -d '{"score":88,"decision":"Pass","notes":"Strong candidate"}')
           SCREEN_JSON="$SCREEN" node -e "const x=JSON.parse(process.env.SCREEN_JSON);if(x.current_stage!=='Interview'||x.screening_decision!=='Pass')process.exit(1)"
+          LOOKUP_INTERVIEW=$(curl -fsS "http://127.0.0.1:3000/api/lookup/$CODE")
+          LOOKUP_INTERVIEW_JSON="$LOOKUP_INTERVIEW" node -e "const x=JSON.parse(process.env.LOOKUP_INTERVIEW_JSON);if(x.stage!=='Interview'||x.data_payload?.screening_questions?.length||x.next_action!=='HR interview decision')process.exit(1)"
 
           PROGRESS1=$(curl -fsS "http://127.0.0.1:3000/api/applications/$ID/progress")
           PROGRESS1_JSON="$PROGRESS1" node -e "const x=JSON.parse(process.env.PROGRESS1_JSON);if(!Array.isArray(x)||x.length!==3||x[0].stage!=='Applied'||x[1].stage!=='Screening'||x[2].stage!=='Interview')process.exit(1)"
@@ -83,11 +88,15 @@ jobs:
           INTERVIEW=$(curl -fsS -X POST http://127.0.0.1:3000/api/interviews -H 'Content-Type: application/json' -d "{\"application_id\":$ID,\"interviewer_name\":\"CI HR\",\"interview_type\":\"In-person\",\"scheduled_time\":\"2030-01-15T10:00:00\",\"duration_minutes\":45}")
           INTERVIEW_ID=$(INTERVIEW_JSON="$INTERVIEW" node -e "const x=JSON.parse(process.env.INTERVIEW_JSON);if(!x.id)process.exit(1);process.stdout.write(String(x.id))")
           INTERVIEW_JSON="$INTERVIEW" node -e "const x=JSON.parse(process.env.INTERVIEW_JSON);if(x.scheduled_time!=='2030-01-15T10:00:00.000Z' && !x.scheduled_time.startsWith('2030-01-15T10:00:00'))process.exit(1)"
+          LOOKUP_SCHEDULED=$(curl -fsS "http://127.0.0.1:3000/api/lookup/$CODE")
+          LOOKUP_SCHEDULED_JSON="$LOOKUP_SCHEDULED" node -e "const x=JSON.parse(process.env.LOOKUP_SCHEDULED_JSON);if(x.stage!=='Interview'||!x.data_payload?.interview?.scheduled_time)process.exit(1)"
 
           SCORE=$(curl -fsS -X POST "http://127.0.0.1:3000/api/interviews/$INTERVIEW_ID/score" -H 'Content-Type: application/json' -d '{"score":91,"decision":"Hired","feedback":"Excellent"}')
           SCORE_JSON="$SCORE" node -e "const x=JSON.parse(process.env.SCORE_JSON);if(x.status!=='Completed'||x.score!==91)process.exit(1)"
           APPS=$(curl -fsS http://127.0.0.1:3000/api/applications)
           APPS_JSON="$APPS" ID="$ID" node -e "const xs=JSON.parse(process.env.APPS_JSON);const x=xs.find(a=>String(a.id)===process.env.ID);if(!x||x.current_stage!=='Offer')process.exit(1)"
+          LOOKUP_OFFER=$(curl -fsS "http://127.0.0.1:3000/api/lookup/$CODE")
+          LOOKUP_OFFER_JSON="$LOOKUP_OFFER" node -e "const x=JSON.parse(process.env.LOOKUP_OFFER_JSON);if(x.stage!=='Offer'||!Array.isArray(x.data_payload?.cost_items)||x.data_payload.cost_items.length<1)process.exit(1)"
 
           PAY=$(curl -fsS -X POST http://127.0.0.1:3000/api/pay/mpesa -H 'Content-Type: application/json' -d "{\"application_id\":$ID,\"phone\":\"0712345678\",\"amount\":3500}")
           CHECKOUT=$(PAY_JSON="$PAY" node -e "const x=JSON.parse(process.env.PAY_JSON);if(!x.checkoutRequestID)process.exit(1);process.stdout.write(x.checkoutRequestID)")
