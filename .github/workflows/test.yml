@@ -1,4 +1,4 @@
-# QuickMart CI - validates the current main branch after every push.
+# QuickMart CI - validates the complete Phase 2 recruitment lifecycle.
 name: QuickMart Test
 
 on:
@@ -29,66 +29,86 @@ jobs:
       DB_PASSWORD: postgres
       DB_PORT: 5432
       PORT: 3000
+      MPESA_TEST_MODE: true
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
       - name: Install dependencies
         run: npm install
-
-      - name: Syntax check server
-        run: node --check backend/server.js
-
-      - name: Syntax check frontend script
-        run: node --check frontend/script.js
-
+      - name: Syntax check
+        run: |
+          node --check backend/server.js
+          node --check frontend/script.js
       - name: Start server
         run: node backend/server.js > server.log 2>&1 &
-
       - name: Wait for API
         run: |
           for i in {1..30}; do
-            if curl -fsS http://127.0.0.1:3000/api/jobs >/dev/null; then
-              exit 0
-            fi
+            if curl -fsS http://127.0.0.1:3000/api/jobs >/dev/null; then exit 0; fi
             sleep 2
           done
-          echo "Server did not become ready. Log follows:"
-          test -f server.log && cat server.log || true
+          cat server.log || true
           exit 1
-
-      - name: Smoke test jobs and applications
+      - name: Existing smoke tests
         run: |
           curl -fsS http://127.0.0.1:3000/api/jobs
           curl -fsS http://127.0.0.1:3000/api/jobs/1
           curl -fsS http://127.0.0.1:3000/api/applications
-
-      - name: Test application creation and lookup
+      - name: Golden path lifecycle
+        shell: bash
         run: |
-          RESPONSE=$(curl -fsS -X POST http://127.0.0.1:3000/api/apply \
-            -H 'Content-Type: application/json' \
-            -d '{"job_id":1,"full_name":"CI Test Candidate","email":"ci-test@example.com","phone":"0712345678","resume_link":"","cover_letter":"CI smoke test"}')
+          set -euo pipefail
+          RESPONSE=$(curl -fsS -X POST http://127.0.0.1:3000/api/apply -H 'Content-Type: application/json' -d '{"job_id":1,"full_name":"CI Golden Candidate","email":"ci-golden@example.com","phone":"0712345678","county":"Nairobi","qualification":"Diploma","experience":"2 years","motivation":"CI lifecycle","cover_letter":"test"}')
           echo "$RESPONSE"
-          CODE=$(RESPONSE_JSON="$RESPONSE" node -e "const x=JSON.parse(process.env.RESPONSE_JSON); if(!x.data?.lookup_code) process.exit(1); process.stdout.write(x.data.lookup_code)")
-          echo "Lookup code: $CODE"
+          ID=$(RESPONSE_JSON="$RESPONSE" node -e "const x=JSON.parse(process.env.RESPONSE_JSON);if(x.data?.current_stage!=='Applied'||!x.data?.lookup_code)process.exit(1);process.stdout.write(String(x.data.id))")
+          CODE=$(RESPONSE_JSON="$RESPONSE" node -e "process.stdout.write(JSON.parse(process.env.RESPONSE_JSON).lookup_code)")
           LOOKUP=$(curl -fsS "http://127.0.0.1:3000/api/lookup/$CODE")
-          echo "$LOOKUP"
-          LOOKUP_JSON="$LOOKUP" node -e "const x=JSON.parse(process.env.LOOKUP_JSON); if(x.current_stage !== 'Applied' || !x.full_name) process.exit(1)"
+          LOOKUP_JSON="$LOOKUP" node -e "const x=JSON.parse(process.env.LOOKUP_JSON);if(x.current_stage!=='Applied')process.exit(1)"
 
-      - name: Test stage update
+          SCREEN=$(curl -fsS -X POST "http://127.0.0.1:3000/api/applications/$ID/screening" -H 'Content-Type: application/json' -d '{"score":88,"decision":"Pass","notes":"Strong candidate"}')
+          SCREEN_JSON="$SCREEN" node -e "const x=JSON.parse(process.env.SCREEN_JSON);if(x.current_stage!=='Interview'||x.screening_decision!=='Pass')process.exit(1)"
+
+          INTERVIEW=$(curl -fsS -X POST http://127.0.0.1:3000/api/interviews -H 'Content-Type: application/json' -d "{\"application_id\":$ID,\"interviewer_name\":\"CI HR\",\"interview_type\":\"In-person\",\"scheduled_time\":\"2030-01-15T10:00:00\",\"duration_minutes\":45}")
+          INTERVIEW_ID=$(INTERVIEW_JSON="$INTERVIEW" node -e "const x=JSON.parse(process.env.INTERVIEW_JSON);if(!x.id)process.exit(1);process.stdout.write(String(x.id))")
+          INTERVIEW_JSON="$INTERVIEW" node -e "const x=JSON.parse(process.env.INTERVIEW_JSON);if(x.scheduled_time!=='2030-01-15T10:00:00.000Z' && !x.scheduled_time.startsWith('2030-01-15T10:00:00'))process.exit(1)"
+
+          SCORE=$(curl -fsS -X POST "http://127.0.0.1:3000/api/interviews/$INTERVIEW_ID/score" -H 'Content-Type: application/json' -d '{"score":91,"decision":"Hired","feedback":"Excellent"}')
+          SCORE_JSON="$SCORE" node -e "const x=JSON.parse(process.env.SCORE_JSON);if(x.status!=='Completed'||x.score!==91)process.exit(1)"
+          APPS=$(curl -fsS http://127.0.0.1:3000/api/applications)
+          APPS_JSON="$APPS" ID="$ID" node -e "const xs=JSON.parse(process.env.APPS_JSON);const x=xs.find(a=>String(a.id)===process.env.ID);if(!x||x.current_stage!=='Offer')process.exit(1)"
+
+          PAY=$(curl -fsS -X POST http://127.0.0.1:3000/api/pay/mpesa -H 'Content-Type: application/json' -d "{\"application_id\":$ID,\"phone\":\"0712345678\",\"amount\":3500}")
+          CHECKOUT=$(PAY_JSON="$PAY" node -e "const x=JSON.parse(process.env.PAY_JSON);if(!x.checkoutRequestID)process.exit(1);process.stdout.write(x.checkoutRequestID)")
+          PAYMENTS=$(curl -fsS "http://127.0.0.1:3000/api/applications/$ID/progress")
+          PAYMENTS_JSON="$PAYMENTS" CHECKOUT="$CHECKOUT" node -e "const x=JSON.parse(process.env.PAYMENTS_JSON);if(!x.payments.some(p=>p.checkout_request_id===process.env.CHECKOUT&&p.payment_status==='Pending'))process.exit(1)"
+
+          curl -fsS -X POST http://127.0.0.1:3000/api/mpesa/callback -H 'Content-Type: application/json' -d "{\"Body\":{\"stkCallback\":{\"ResultCode\":0,\"ResultDesc\":\"Success\",\"CheckoutRequestID\":\"$CHECKOUT\",\"CallbackMetadata\":{\"Item\":[{\"Name\":\"Amount\",\"Value\":3500},{\"Name\":\"MpesaReceiptNumber\",\"Value\":\"CI123456\"},{\"Name\":\"PhoneNumber\",\"Value\":254712345678}]}}}}"
+
+          PROGRESS=$(curl -fsS "http://127.0.0.1:3000/api/applications/$ID/progress")
+          PROGRESS_JSON="$PROGRESS" node -e "const x=JSON.parse(process.env.PROGRESS_JSON);if(x.application.current_stage!=='Onboarding'||x.application.payment_status!=='Paid'||x.application.onboarding_status!=='In Progress'||!x.timeline.length||!x.payments.length)process.exit(1)"
+          LOOKUP2=$(curl -fsS "http://127.0.0.1:3000/api/lookup/$CODE")
+          LOOKUP2_JSON="$LOOKUP2" node -e "const x=JSON.parse(process.env.LOOKUP2_JSON);if(x.current_stage!=='Onboarding'||x.payment_status!=='Paid'||x.mpesa_receipt_number!=='CI123456')process.exit(1)"
+
+      - name: Rejection path
+        shell: bash
         run: |
-          ID=$(curl -fsS http://127.0.0.1:3000/api/applications | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const x=JSON.parse(s);if(!x[0]?.id)process.exit(1);process.stdout.write(String(x[0].id));})")
-          RESPONSE=$(curl -fsS -X PATCH "http://127.0.0.1:3000/api/applications/$ID/stage" \
-            -H 'Content-Type: application/json' \
-            -d '{"stage":"Screening"}')
-          echo "$RESPONSE"
-          STAGE_JSON="$RESPONSE" node -e "const x=JSON.parse(process.env.STAGE_JSON); if(x.current_stage !== 'Screening') process.exit(1)"
+          set -euo pipefail
+          RESPONSE=$(curl -fsS -X POST http://127.0.0.1:3000/api/apply -H 'Content-Type: application/json' -d '{"job_id":1,"full_name":"CI Rejected Candidate","email":"ci-rejected@example.com","phone":"0711111111"}')
+          ID=$(RESPONSE_JSON="$RESPONSE" node -e "process.stdout.write(String(JSON.parse(process.env.RESPONSE_JSON).data.id))")
+          curl -fsS -X POST "http://127.0.0.1:3000/api/applications/$ID/screening" -H 'Content-Type: application/json' -d '{"score":20,"decision":"Fail","notes":"Does not meet criteria"}' | grep -q 'Rejected'
+          if curl -sS -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3000/api/interviews -H 'Content-Type: application/json' -d "{\"application_id\":$ID,\"scheduled_time\":\"2030-01-16T10:00:00\"}" | grep -q '^400$'; then echo 'Rejected interview blocked'; else exit 1; fi
+
+      - name: Data integrity and dashboard
+        run: |
+          curl -fsS http://127.0.0.1:3000/api/dashboard/stats | grep -q 'total_applications'
+          curl -fsS http://127.0.0.1:3000/api/applications/999999/progress -o /dev/null -w '%{http_code}' | grep -q '^404$'
+          curl -fsS http://127.0.0.1:3000/api/lookup/INVALID-CODE -o /dev/null -w '%{http_code}' | grep -q '^404$'
 
       - name: Show server log on failure
         if: failure()
-        run: test -f server.log && cat server.log || true
+        run: cat server.log || true
