@@ -1,3 +1,4 @@
+# QuickMart CI - validates the current main branch after every push.
 name: QuickMart Test
 
 on:
