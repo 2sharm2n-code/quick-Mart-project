@@ -51,7 +51,7 @@ app.post('/api/apply', async (req, res) => {
       [job_id, candidateResult.rows[0].id, lookupCode]
     );
     await client.query('COMMIT');
-    res.status(201).json({ message: 'Application submitted successfully!', data: result.rows[0] });
+    res.status(201).json({ message: 'Application submitted successfully!', data: result.rows[0], lookup_code: result.rows[0].lookup_code });
   } catch (err) {
     await client.query('ROLLBACK'); console.error(err); res.status(500).json({ error: 'Failed to submit application' });
   } finally { client.release(); }
@@ -73,7 +73,7 @@ app.get('/api/applications', async (req, res) => {
 app.get('/api/lookup/:code', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT a.id, j.title AS job_title, a.current_stage, c.full_name, a.applied_date,
+      SELECT a.id, a.lookup_code, j.title AS job_title, a.current_stage, c.full_name, a.applied_date,
         (SELECT i.scheduled_time FROM interviews i WHERE i.application_id=a.id ORDER BY i.scheduled_time DESC LIMIT 1) AS interview_time,
         (SELECT p.payment_status FROM payments p WHERE p.application_id=a.id ORDER BY p.transaction_date DESC LIMIT 1) AS payment_status
       FROM applications a JOIN jobs j ON a.job_id=j.id JOIN candidates c ON a.candidate_id=c.id
@@ -136,8 +136,9 @@ app.get('/api/applications/:id/stages', async (req, res) => {
   catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
-// M-PESA: configure all production/sandbox credentials via environment variables; no secrets are committed.
-const MPESA_CONSUMER_KEY = process.env.MPESA_KEY;
+// M-PESA: configure all sandbox/production credentials through environment variables; no secrets are committed.
+// Accept both names used by the migration instructions and the earlier project scaffold.
+const MPESA_CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY || process.env.MPESA_KEY;
 const MPESA_SECRET = process.env.MPESA_SECRET;
 const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE || '174379';
 const MPESA_PASSKEY = process.env.MPESA_PASSKEY;
