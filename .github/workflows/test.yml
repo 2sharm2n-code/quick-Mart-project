@@ -40,6 +40,10 @@ jobs:
           node-version: 20
       - name: Install dependencies
         run: npm install
+      - name: Initialize database schema
+        run: |
+          PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -f backend/sql/schema.sql
+          PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -f backend/sql/migration_p1.sql
       - name: Syntax check
         run: |
           node --check backend/server.js
