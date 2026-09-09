@@ -31,32 +31,59 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+
       - name: Install dependencies
         run: npm install
+
       - name: Syntax check server
         run: node --check backend/server.js
+
       - name: Syntax check frontend script
         run: node --check frontend/script.js
+
       - name: Start server
         run: node backend/server.js > server.log 2>&1 &
+
       - name: Wait for API
         run: |
           for i in {1..30}; do
-            if curl -fsS http://127.0.0.1:3000/api/jobs >/dev/null; then exit 0; fi
+            if curl -fsS http://127.0.0.1:3000/api/jobs >/dev/null; then
+              exit 0
+            fi
             sleep 2
           done
-          cat server.log
+          echo "Server did not become ready. Log follows:"
+          test -f server.log && cat server.log || true
           exit 1
-      - name: Smoke test jobs and lookup
+
+      - name: Smoke test jobs and applications
         run: |
           curl -fsS http://127.0.0.1:3000/api/jobs
           curl -fsS http://127.0.0.1:3000/api/jobs/1
           curl -fsS http://127.0.0.1:3000/api/applications
+
+      - name: Test application creation and lookup
+        run: |
+          RESPONSE=$(curl -fsS -X POST http://127.0.0.1:3000/api/apply \
+            -H 'Content-Type: application/json' \
+            -d '{"job_id":1,"full_name":"CI Test Candidate","email":"ci-test@example.com","phone":"0712345678","resume_link":"","cover_letter":"CI smoke test"}')
+          echo "$RESPONSE"
+          CODE=$(node -e "const x=JSON.parse(process.argv[1]); if(!x.lookup_code) process.exit(1); process.stdout.write(x.lookup_code)" "$RESPONSE")
+          echo "Lookup code: $CODE"
+          curl -fsS "http://127.0.0.1:3000/api/lookup/$CODE"
+
+      - name: Test stage update
+        run: |
+          ID=$(curl -fsS http://127.0.0.1:3000/api/applications | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const x=JSON.parse(s);if(!x.applications?.[0]?.id)process.exit(1);process.stdout.write(String(x.applications[0].id));})")
+          curl -fsS -X PATCH "http://127.0.0.1:3000/api/applications/$ID/stage" \
+            -H 'Content-Type: application/json' \
+            -d '{"stage":"Screening"}'
+
       - name: Show server log on failure
         if: failure()
-        run: cat server.log
+        run: test -f server.log && cat server.log || true
