@@ -1,0 +1,32 @@
+name: Apply runtime fix
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix Express stage actor wiring
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('backend/server.js')
+          s=p.read_text()
+          old="app.patch('/api/applications/:id/stage',handleStageUpdate);"
+          new="app.patch('/api/applications/:id/stage',(req,res)=>handleStageUpdate(req,res,'HR'));"
+          if old in s:
+              p.write_text(s.replace(old,new,1))
+          PY
+          node --check backend/server.js
+          git config user.name 'quickmart-ci'
+          git config user.email 'actions@users.noreply.github.com'
+          git add backend/server.js
+          if ! git diff --cached --quiet; then
+            git commit -m 'Fix Express stage actor wiring'
+            git push origin main
+          fi
