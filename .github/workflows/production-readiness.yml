@@ -9,9 +9,7 @@ jobs:
     services:
       postgres:
         image: postgres:16
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: quick_mart_db
+        env: {POSTGRES_PASSWORD: postgres, POSTGRES_DB: quick_mart_db}
         ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U postgres -d quick_mart_db"
@@ -29,9 +27,10 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 20}
       - run: npm install
-      - name: Initialize every migration
+      - name: Initialize database in dependency order
         run: |
-          for f in backend/sql/*.sql; do echo "Applying $f"; PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -f "$f"; done
+          set -e
+          for f in backend/sql/schema.sql backend/sql/migration_p1.sql backend/sql/migration_screening_dashboard.sql backend/sql/migration_p2_complete.sql backend/sql/migration_production_readiness.sql; do echo "Applying $f"; PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -f "$f"; done
       - name: Syntax validation
         run: |
           node --check backend/server.js
@@ -62,7 +61,8 @@ jobs:
           curl -fsS -X POST "http://127.0.0.1:3000/api/applications/$ID/cv" -H 'Content-Type: application/json' -d '{"filename":"candidate.pdf","mime_type":"application/pdf","data_base64":"Y2k="}' | grep -q 'candidate.pdf'
           C=$(curl -fsS "http://127.0.0.1:3000/api/applications")
           C="$C" node -e "const x=JSON.parse(process.env.C);const a=x.find(v=>v.id===$ID);if(!a)process.exit(1)"
-          curl -fsS -X PATCH "http://127.0.0.1:3000/api/candidates/$(C="$C" node -e "const x=JSON.parse(process.env.C);process.stdout.write(String(x.find(v=>v.id===$ID).candidate_id))")/verify" -H 'Content-Type: application/json' -d '{"verified":true,"notes":"CI verified"}' | grep -q 'true'
+          CID=$(C="$C" node -e "const x=JSON.parse(process.env.C);process.stdout.write(String(x.find(v=>v.id===$ID).candidate_id))")
+          curl -fsS -X PATCH "http://127.0.0.1:3000/api/candidates/$CID/verify" -H 'Content-Type: application/json' -d '{"verified":true,"notes":"CI verified"}' | grep -q 'true'
           curl -fsS -X POST "http://127.0.0.1:3000/api/communications/send" -H 'Content-Type: application/json' -d "{\"application_id\":$ID,\"channel\":\"Email\",\"body\":\"Hello {{full_name}} {{lookup_code}}\"}" | grep -q 'recipient'
           L=$(curl -fsS "http://127.0.0.1:3000/api/lookup/$CODE")
           L="$L" node -e "const x=JSON.parse(process.env.L);if(x.stage!=='Offer'||!x.data_payload?.cost_items?.length)process.exit(1)"
