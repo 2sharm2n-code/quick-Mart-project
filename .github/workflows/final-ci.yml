@@ -1,0 +1,94 @@
+name: QuickMart Final CI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  final:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: quick_mart_db
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d quick_mart_db"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      DB_USER: postgres
+      DB_HOST: localhost
+      DB_NAME: quick_mart_db
+      DB_PASSWORD: postgres
+      DB_PORT: 5432
+      PORT: 3000
+      MPESA_TEST_MODE: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install
+        run: npm install
+      - name: Initialize all database migrations
+        run: |
+          set -e
+          for f in backend/sql/schema.sql backend/sql/migration_p1.sql backend/sql/migration_screening_dashboard.sql backend/sql/migration_p2_complete.sql backend/sql/migration_final_hardening.sql; do
+            PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -f "$f"
+          done
+      - name: Syntax
+        run: |
+          node --check backend/server.js
+          node --check frontend/portal.js
+      - name: Start server
+        run: node backend/server.js > server.log 2>&1 &
+      - name: Wait for API
+        run: |
+          for i in {1..30}; do curl -fsS http://127.0.0.1:3000/api/jobs >/dev/null && exit 0; sleep 2; done
+          cat server.log
+          exit 1
+      - name: Final end-to-end verification
+        run: |
+          set -euo pipefail
+          APPLY=$(curl -fsS -X POST http://127.0.0.1:3000/api/apply -H 'Content-Type: application/json' -d '{"job_id":1,"full_name":"Final CI Candidate","email":"final-ci@example.com","phone":"0712345678","county":"Nairobi","qualification":"Diploma","experience":"2 years","motivation":"QuickMart"}')
+          ID=$(APPLY_JSON="$APPLY" node -e 'process.stdout.write(String(JSON.parse(process.env.APPLY_JSON).data.id))')
+          CODE=$(APPLY_JSON="$APPLY" node -e 'process.stdout.write(JSON.parse(process.env.APPLY_JSON).lookup_code)')
+
+          # Same-link lookup and live applicant presence.
+          LOOK=$(curl -fsS "http://127.0.0.1:3000/api/lookup/$CODE")
+          LOOK_JSON="$LOOK" node -e 'const x=JSON.parse(process.env.LOOK_JSON);if(x.stage!=="Applied"||!x.data_payload.screening_questions.length)process.exit(1)'
+          curl -fsS -X POST "http://127.0.0.1:3000/api/applications/$ID/presence" -H 'Content-Type: application/json' -d '{"session_token":"final-ci-session"}' | grep -q 'current_stage'
+          ONLINE=$(curl -fsS "http://127.0.0.1:3000/api/dashboard/online?minutes=5")
+          ONLINE_JSON="$ONLINE" ID="$ID" node -e 'const x=JSON.parse(process.env.ONLINE_JSON),id=Number(process.env.ID);if(!x.some(a=>a.id===id))process.exit(1)'
+
+          # Identity verification and persistent CV metadata.
+          CANDIDATE_ID=$(APPLY_JSON="$APPLY" node -e 'process.stdout.write(String(JSON.parse(process.env.APPLY_JSON).data.candidate_id))')
+          curl -fsS -X PATCH "http://127.0.0.1:3000/api/candidates/$CANDIDATE_ID/verify" -H 'Content-Type: application/json' -d '{"verified":true,"notes":"CI verified"}' | grep -q 'true'
+          curl -fsS -X POST "http://127.0.0.1:3000/api/applications/$ID/cv" -H 'Content-Type: application/json' -d '{"filename":"final-ci-cv.pdf","mime_type":"application/pdf","data_base64":"JVBERi0xLjQ="}' | grep -q 'final-ci-cv.pdf'
+
+          # Screening -> interview -> offer -> hired and stage history.
+          SCREEN=$(curl -fsS -X POST "http://127.0.0.1:3000/api/applications/$ID/screening" -H 'Content-Type: application/json' -d '{"score":90,"decision":"Pass","notes":"Final CI screening"}')
+          SCREEN_JSON="$SCREEN" node -e 'const x=JSON.parse(process.env.SCREEN_JSON);if(x.current_stage!=="Interview")process.exit(1)'
+          IV=$(curl -fsS -X POST http://127.0.0.1:3000/api/interviews -H 'Content-Type: application/json' -d "{\"application_id\":$ID,\"interviewer_name\":\"Final HR\",\"interview_type\":\"Online\",\"scheduled_time\":\"2035-01-15T10:00:00\",\"duration_minutes\":30}")
+          IID=$(IV_JSON="$IV" node -e 'process.stdout.write(String(JSON.parse(process.env.IV_JSON).id))')
+          curl -fsS -X POST "http://127.0.0.1:3000/api/interviews/$IID/confirm" >/dev/null
+          curl -fsS -X POST "http://127.0.0.1:3000/api/interviews/$IID/score" -H 'Content-Type: application/json' -d '{"score":92,"decision":"Hired","feedback":"Final CI pass"}' | grep -q 'Completed'
+          LOOK2=$(curl -fsS "http://127.0.0.1:3000/api/lookup/$CODE")
+          LOOK2_JSON="$LOOK2" node -e 'const x=JSON.parse(process.env.LOOK2_JSON);if(x.stage!=="Offer"||x.data_payload.cost_items.length<3)process.exit(1)'
+          curl -fsS -X PATCH "http://127.0.0.1:3000/api/applications/$ID/stage" -H 'Content-Type: application/json' -d '{"stage":"Hired"}' >/dev/null
+
+          # Onboarding costs and HR communication.
+          COSTS=$(curl -fsS "http://127.0.0.1:3000/api/onboarding/$ID/costs")
+          COSTS_JSON="$COSTS" node -e 'const x=JSON.parse(process.env.COSTS_JSON);if(x.length<3||!x.some(c=>c.item_name==="Uniform Package"))process.exit(1)'
+          MSG=$(curl -fsS -X POST "http://127.0.0.1:3000/api/communications/send" -H 'Content-Type: application/json' -d "{\"application_id\":$ID,\"channel\":\"Email\",\"subject\":\"QuickMart CI\",\"body\":\"Hello {{full_name}}, application {{lookup_code}}\"}")
+          MSG_JSON="$MSG" node -e 'const x=JSON.parse(process.env.MSG_JSON);if(x.recipient!=="final-ci@example.com")process.exit(1)'
+
+          # Rejection path and data integrity.
+          REJ=$(curl -fsS -X POST http://127.0.0.1:3000/api/apply -H 'Content-Type: application/json' -d '{"job_id":1,"full_name":"Final CI Rejected","email":"final-rejected@example.com","phone":"0711111111","qualification":"Certificate"}')
+          RID=$(REJ_JSON="$REJ" node -e 'process.stdout.write(String(JSON.parse(process.env.REJ_JSON).data.id))')
+          curl -fsS -X POST "http://127.0.0.1:3000/api/applications/$RID/screening" -H 'Content-Type: application/json' -d '{"score":20,"decision":"Fail","notes":"Final CI rejection"}' | grep -q 'Rejected'
+          curl -fsS http://127.0.0.1:3000/api/dashboard/stats | grep -q 'total_applications'
+          curl -fsS "http://127.0.0.1:3000/api/applications/$ID/progress" | grep -q 'Interview'
