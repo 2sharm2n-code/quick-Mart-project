@@ -44,6 +44,7 @@ jobs:
           PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -f backend/sql/schema.sql
           PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -f backend/sql/migration_p1.sql
           PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -f backend/sql/migration_screening_dashboard.sql
+          PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -f backend/sql/migration_p2_complete.sql
       - name: Syntax check
         run: |
           node --check backend/server.js
@@ -107,6 +108,36 @@ jobs:
           SCORE_JSON="$SCORE" node -e "const x=JSON.parse(process.env.SCORE_JSON);if(x.status!=='Completed'||x.score!==91)process.exit(1)"
           LOOKUP_OFFER=$(curl -fsS "http://127.0.0.1:3000/api/lookup/$CODE")
           LOOKUP_OFFER_JSON="$LOOKUP_OFFER" node -e "const x=JSON.parse(process.env.LOOKUP_OFFER_JSON);if(x.stage!=='Offer'||!Array.isArray(x.data_payload?.cost_items)||x.data_payload.cost_items.length<1)process.exit(1)"
+      - name: Complete Phase 2 workflow tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          PAGE=$(curl -fsS http://127.0.0.1:3000/hr-workflow.html)
+          echo "$PAGE" | grep -q 'QuickMart Kenya — HR Workflow'
+          echo "$PAGE" | grep -q 'Screening, interview, onboarding and payment pipeline'
+          RESPONSE=$(curl -fsS -X POST http://127.0.0.1:3000/api/apply -H 'Content-Type: application/json' -d '{"job_id":1,"full_name":"CI Phase2 Candidate","email":"ci-phase2@example.com","phone":"0713333333","county":"Nairobi","qualification":"Diploma","experience":"3 years","motivation":"Phase 2"}')
+          ID=$(RESPONSE_JSON="$RESPONSE" node -e "process.stdout.write(String(JSON.parse(process.env.RESPONSE_JSON).data.id))")
+          CODE=$(RESPONSE_JSON="$RESPONSE" node -e "process.stdout.write(JSON.parse(process.env.RESPONSE_JSON).lookup_code)")
+          curl -fsS -X POST "http://127.0.0.1:3000/api/applications/$ID/screening" -H 'Content-Type: application/json' -d '{"score":90,"decision":"Pass","notes":"Phase 2 screening"}' >/dev/null
+          INTERVIEW=$(curl -fsS -X POST http://127.0.0.1:3000/api/interviews -H 'Content-Type: application/json' -d "{\"application_id\":$ID,\"interviewer_name\":\"Phase2 HR\",\"interview_type\":\"Online\",\"scheduled_time\":\"2031-02-10T09:00:00\",\"duration_minutes\":30}")
+          IID=$(INTERVIEW_JSON="$INTERVIEW" node -e "process.stdout.write(String(JSON.parse(process.env.INTERVIEW_JSON).id))")
+          curl -fsS -X POST "http://127.0.0.1:3000/api/interviews/$IID/confirm" >/dev/null
+          CONFLICT=$(curl -s -o /tmp/conflict.json -w '%{http_code}' -X POST http://127.0.0.1:3000/api/interviews -H 'Content-Type: application/json' -d "{\"application_id\":$ID,\"interviewer_name\":\"Phase2 HR\",\"interview_type\":\"Online\",\"scheduled_time\":\"2031-02-10T09:15:00\",\"duration_minutes\":30}")
+          test "$CONFLICT" = "409"
+          curl -fsS -X POST "http://127.0.0.1:3000/api/interviews/$IID/score" -H 'Content-Type: application/json' -d '{"score":92,"decision":"Hired","feedback":"Phase 2 pass"}' >/dev/null
+          COSTS=$(curl -fsS "http://127.0.0.1:3000/api/onboarding/$ID/costs")
+          COSTS_JSON="$COSTS" node -e "const x=JSON.parse(process.env.COSTS_JSON);if(x.length<3||!x.some(i=>i.item_name==='Uniform Package'))process.exit(1)"
+          COST_ID=$(COSTS_JSON="$COSTS" node -e "process.stdout.write(String(JSON.parse(process.env.COSTS_JSON)[0].id))")
+          curl -fsS -X PATCH "http://127.0.0.1:3000/api/onboarding/$COST_ID" -H 'Content-Type: application/json' -d '{"actual_cost":2500,"payment_status":"Paid"}' | grep -q 'Paid'
+          CANDIDATE_ID=$(curl -fsS http://127.0.0.1:3000/api/applications | RESPONSE_JSON='' node -e 'process.stdin.on("data",d=>process.stdout.write(d)).on("end",()=>process.exit(0))' >/dev/null 2>&1 || true)
+          APP=$(curl -fsS "http://127.0.0.1:3000/api/lookup/$CODE")
+          APP_JSON="$APP" node -e "const x=JSON.parse(process.env.APP_JSON);if(x.stage!=='Offer'||x.data_payload.cost_items.length<3)process.exit(1)"
+          PROGRESS=$(curl -fsS "http://127.0.0.1:3000/api/applications/$ID/progress")
+          PROGRESS_JSON="$PROGRESS" node -e "const x=JSON.parse(process.env.PROGRESS_JSON);if(x.filter(e=>e.type==='stage').length<4||!x.some(e=>e.type==='interview'))process.exit(1)"
+          curl -fsS -X PATCH "http://127.0.0.1:3000/api/applications/$ID/stage" -H 'Content-Type: application/json' -d '{"stage":"Hired"}' >/dev/null
+          curl -fsS -X POST "http://127.0.0.1:3000/api/communications/send" -H 'Content-Type: application/json' -d "{\"application_id\":$ID,\"channel\":\"Email\",\"subject\":\"QuickMart test\",\"body\":\"Test communication\"}" | grep -q 'recipient'
+          LOOKUP_FINAL=$(curl -fsS "http://127.0.0.1:3000/api/lookup/$CODE")
+          LOOKUP_FINAL_JSON="$LOOKUP_FINAL" node -e "const x=JSON.parse(process.env.LOOKUP_FINAL_JSON);if(x.next_action!=='Begin onboarding'&&x.stage!=='Hired')process.exit(1)"
       - name: Rejection path
         shell: bash
         run: |
@@ -119,6 +150,7 @@ jobs:
           curl -fsS http://127.0.0.1:3000/api/dashboard/stats | grep -q 'total_applications'
           curl -fsS http://127.0.0.1:3000/api/applications/999999/progress -o /dev/null -w '%{http_code}' | grep -q '^404$'
           curl -fsS http://127.0.0.1:3000/api/lookup/INVALID-CODE -o /dev/null -w '%{http_code}' | grep -q '^404$'
+          curl -fsS http://127.0.0.1:3000/api/dashboard/queue?stage=Screening >/dev/null
       - name: Show server log on failure
         if: failure()
         run: cat server.log || true
