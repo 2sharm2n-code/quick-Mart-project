@@ -10,8 +10,12 @@ const QUESTIONS=[
  ['motivation','Why do you want to work with QuickMart?']
 ];
 let state=null;
+let sessionToken=sessionStorage.getItem('qm_session');
+if(!sessionToken){sessionToken=crypto.randomUUID();sessionStorage.setItem('qm_session',sessionToken);}
 async function getLookup(){const r=await fetch(`${API}/lookup/${encodeURIComponent(code)}`);const x=await r.json();if(!r.ok)throw new Error(x.error||'Application not found');return x;}
-async function load(){try{if(!code)throw new Error('Missing application code');state=await getLookup();render(state);}catch(e){root.innerHTML=`<div class="notice error"><strong>Unable to open this application.</strong><p>${esc(e.message)}</p></div>`;}}
+async function heartbeat(){if(!state?.id)return;try{await fetch(`${API}/applications/${state.id}/presence`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_token:sessionToken})});}catch(e){}}
+async function load(){try{if(!code)throw new Error('Missing application code');state=await getLookup();render(state);await heartbeat();}catch(e){root.innerHTML=`<div class="notice error"><strong>Unable to open this application.</strong><p>${esc(e.message)}</p></div>`;}}
+setInterval(heartbeat,20000);
 function shell(title,subtitle,body){root.innerHTML=`<h1>${esc(title)}</h1><p class="muted">${esc(subtitle||'')}</p>${body}`;}
 function render(x){
  const stage=x.stage||x.current_stage;
