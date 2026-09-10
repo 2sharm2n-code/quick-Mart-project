@@ -6,8 +6,10 @@ ALTER TABLE stage_history ADD COLUMN IF NOT EXISTS triggered_by VARCHAR(100);
 ALTER TABLE stage_history ADD COLUMN IF NOT EXISTS reason TEXT;
 ALTER TABLE stage_history ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP;
 
--- Guard against accidental Express middleware function values being persisted as the actor.
--- This keeps legacy callers safe while the API uses explicit actor strings.
+-- The legacy stage route once passed Express's next() function as the actor.
+-- Use TEXT so the database cannot reject the request before the safety trigger can sanitize it.
+ALTER TABLE stage_history ALTER COLUMN triggered_by TYPE TEXT;
+
 CREATE OR REPLACE FUNCTION quickmart_sanitize_stage_actor()
 RETURNS trigger
 LANGUAGE plpgsql
