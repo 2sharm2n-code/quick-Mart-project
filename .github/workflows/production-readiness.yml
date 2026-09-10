@@ -1,0 +1,71 @@
+name: QuickMart Production Readiness
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  production:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: quick_mart_db
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d quick_mart_db"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DB_USER: postgres
+      DB_HOST: localhost
+      DB_NAME: quick_mart_db
+      DB_PASSWORD: postgres
+      DB_PORT: 5432
+      PORT: 3000
+      MPESA_TEST_MODE: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 20}
+      - run: npm install
+      - name: Initialize every migration
+        run: |
+          for f in backend/sql/*.sql; do echo "Applying $f"; PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -f "$f"; done
+      - name: Syntax validation
+        run: |
+          node --check backend/server.js
+          node --check frontend/script.js
+          node --check frontend/portal.js
+      - name: Start server
+        run: node backend/server.js >server.log 2>&1 &
+      - name: Wait for API
+        run: |
+          for i in {1..30}; do curl -fsS http://127.0.0.1:3000/api/jobs >/dev/null && exit 0; sleep 1; done
+          cat server.log; exit 1
+      - name: End-to-end production readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS http://127.0.0.1:3000/portal/DEMO-CODE | grep -q 'QuickMart Applicant Portal'
+          R=$(curl -fsS -X POST http://127.0.0.1:3000/api/apply -H 'Content-Type: application/json' -d '{"job_id":1,"full_name":"Production Candidate","email":"production-readiness@example.com","phone":"0714000000","county":"Nairobi","qualification":"Diploma","experience":"2 years","motivation":"QuickMart"}')
+          ID=$(R="$R" node -e "process.stdout.write(String(JSON.parse(process.env.R).data.id))")
+          CODE=$(R="$R" node -e "process.stdout.write(JSON.parse(process.env.R).lookup_code)")
+          curl -fsS -X POST "http://127.0.0.1:3000/api/applications/$ID/presence" -H 'Content-Type: application/json' -d '{"session_token":"ci-production"}' | grep -q 'current_stage'
+          curl -fsS "http://127.0.0.1:3000/api/dashboard/online" | grep -q "$CODE"
+          curl -fsS -X POST "http://127.0.0.1:3000/api/applications/$ID/screening" -H 'Content-Type: application/json' -d '{"score":90,"decision":"Pass","notes":"{\"availability\":\"yes\"}"}' | grep -q 'Interview'
+          I=$(curl -fsS -X POST http://127.0.0.1:3000/api/interviews -H 'Content-Type: application/json' -d "{\"application_id\":$ID,\"interviewer_name\":\"CI HR\",\"scheduled_time\":\"2035-01-10T09:00:00\",\"duration_minutes\":30}")
+          IID=$(I="$I" node -e "process.stdout.write(String(JSON.parse(process.env.I).id))")
+          curl -fsS -X POST "http://127.0.0.1:3000/api/interviews/$IID/score" -H 'Content-Type: application/json' -d '{"score":95,"decision":"Hired","feedback":"Pass"}' >/dev/null
+          COSTS=$(curl -fsS "http://127.0.0.1:3000/api/onboarding/$ID/costs")
+          COSTS="$COSTS" node -e "const x=JSON.parse(process.env.COSTS);if(x.length<3)process.exit(1)"
+          curl -fsS -X POST "http://127.0.0.1:3000/api/applications/$ID/cv" -H 'Content-Type: application/json' -d '{"filename":"candidate.pdf","mime_type":"application/pdf","data_base64":"Y2k="}' | grep -q 'candidate.pdf'
+          C=$(curl -fsS "http://127.0.0.1:3000/api/applications")
+          C="$C" node -e "const x=JSON.parse(process.env.C);const a=x.find(v=>v.id===$ID);if(!a)process.exit(1)"
+          curl -fsS -X PATCH "http://127.0.0.1:3000/api/candidates/$(C="$C" node -e "const x=JSON.parse(process.env.C);process.stdout.write(String(x.find(v=>v.id===$ID).candidate_id))")/verify" -H 'Content-Type: application/json' -d '{"verified":true,"notes":"CI verified"}' | grep -q 'true'
+          curl -fsS -X POST "http://127.0.0.1:3000/api/communications/send" -H 'Content-Type: application/json' -d "{\"application_id\":$ID,\"channel\":\"Email\",\"body\":\"Hello {{full_name}} {{lookup_code}}\"}" | grep -q 'recipient'
+          L=$(curl -fsS "http://127.0.0.1:3000/api/lookup/$CODE")
+          L="$L" node -e "const x=JSON.parse(process.env.L);if(x.stage!=='Offer'||!x.data_payload?.cost_items?.length)process.exit(1)"
+      - name: Server log on failure
+        if: failure()
+        run: cat server.log || true
