@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "QuickMart Kenya Recruitment & Onboarding Portal",
   "main": "backend/server.js",
+  "engines": {
+    "node": ">=20 <23"
+  },
   "scripts": {
     "start": "node backend/server.js",
     "dev": "nodemon backend/server.js"
