@@ -1,0 +1,24 @@
+Current Hatchable source files recorded:
+api/admin/applicants.js
+api/admin/clear-history.js
+api/admin/cost-items.js
+api/admin/delete-applicant.js
+api/admin/online.js
+api/admin/positions.js
+api/admin/recruitment-messages.js
+api/admin/recruitment-queue.js
+api/admin/screening.js
+api/applications.js
+api/google/oauth-callback.js
+api/google/oauth-start.js
+api/paystack/webhook.js
+api/recruitment-stage.js
+lib/recruitment-mail.js
+public/admin-overrides.css
+public/admin.js
+public/admin/index.html
+public/app.js
+public/index.html
+public/portal.js
+public/portal/index.html
+public/theme.css
