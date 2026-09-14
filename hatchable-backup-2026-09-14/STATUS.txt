@@ -1,0 +1,4 @@
+QuickMart Hatchable backup date: 2026-09-14
+Project: proj_iVUkJLoQu6PO
+Latest deployed version: 26
+This is an additive recovery folder. Existing repository history is preserved.
