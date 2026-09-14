@@ -1,0 +1,10 @@
+LATEST HATCHABLE FILE: public/portal.js
+
+Current stage mapping:
+- screening: QuickMart interior visual
+- interview: dedicated interview-room visual
+- careers/final Apply: career visual
+- onboarding/payment: payment desk visual
+- completed: branch completion visual
+
+The live file contains the complete candidate stage logic, interview upload, final Apply, Paystack-only onboarding payment, persistent same-link stage recognition, and the 10.5-day reporting countdown. The current deployed source is the authoritative Hatchable copy.
