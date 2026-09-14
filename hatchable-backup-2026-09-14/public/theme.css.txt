@@ -1,0 +1,7 @@
+LATEST HATCHABLE FILE: public/theme.css
+
+This file is the current deployed visual stylesheet for the applicant portal and HR room. Current Hatchable hash: 84bb4c8a0178d270bb01676b10b7748131c7eee2c9db668521aad2061d9e2ff8.
+
+It contains the latest QuickMart red/black visual system, distinct stage visuals, mobile layouts, HR room styling, normal-sized applicant/payment controls, and branded message-card styling.
+
+The exact current source remains in Hatchable project proj_iVUkJLoQu6PO.
