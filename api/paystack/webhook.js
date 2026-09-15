@@ -1,50 +1,35 @@
-import { db, config } from "hatchable";
+import { db, config, webhooks } from "hatchable";
+import { sendRecruitmentEmail } from "lib/recruitment-mail.js";
 
 export const access = "public";
 export const methods = ["POST"];
 
-async function verifySignature(req) {
-  const secret = await config.get("PAYSTACK_LIVE_SECRET_KEY");
-  if (!secret) return false;
-  const signature = String(req.headers?.["x-paystack-signature"] || "");
-  if (!signature) return false;
-  const body = JSON.stringify(req.body || {});
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-512" }, false, ["sign"]);
-  const digest = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
-  const hex = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
-  return hex === signature;
-}
-
 export default async function (req, res) {
+  const secret = await config.get("PAYSTACK_LIVE_SECRET_KEY");
+  const signature = req.headers?.["x-paystack-signature"] || req.headers?.["X-Paystack-Signature"] || "";
+  const ok = await webhooks.verifyHmac({ raw: req.rawBody, signature, secret, algorithm: "sha512", encoding: "hex", tolerance: 0 });
+  if (!ok) return res.status(401).json({ success: false, message: "Invalid webhook signature." });
+  const event = req.body || {};
+  if (event.event !== "charge.success") return res.json({ success: true, ignored: true });
+  const tx = event.data || {};
+  const reference = String(tx.reference || "").trim();
+  if (!reference) return res.status(400).json({ success: false, message: "Missing transaction reference." });
+  const { rows } = await db.query("SELECT id, applicant_id, amount_kes, status FROM payments WHERE payment_reference = $1 LIMIT 1", [reference]);
+  if (!rows.length) return res.json({ success: true, ignored: true });
+  const payment = rows[0];
+  if (payment.status === "completed") return res.json({ success: true, already_processed: true });
+  const expected = Number(payment.amount_kes || 0) * 100;
+  if (String(tx.currency || "KES").toUpperCase() !== "KES" || Number(tx.amount || 0) !== expected || tx.status !== "success") return res.status(400).json({ success: false, message: "Payment verification failed." });
+  await db.query("UPDATE payments SET status='completed', completed_at=COALESCE(completed_at,now()), result_code=0, result_desc=$2, raw_callback=$3::jsonb WHERE id=$1", [payment.id, String(tx.gateway_response || "Paystack payment successful"), JSON.stringify(tx)]);
+  const paidAt=new Date().toISOString();
+  await db.query("UPDATE applicants SET payment_status='paid', paid_at=COALESCE(paid_at,now()), recruitment_stage='completed' WHERE id=$1", [payment.applicant_id]);
   try {
-    if (!(await verifySignature(req))) return res.status(401).json({ success: false, message: "Invalid Paystack signature." });
-    const event = req.body || {};
-    if (event.event !== "charge.success") return res.json({ received: true });
-
-    const data = event.data || {};
-    const reference = String(data.reference || "").trim();
-    const metadata = data.metadata || {};
-    const applicationRef = String(metadata.application_ref || reference || "").trim().toUpperCase();
-    const amountKes = Number(data.amount || 0) / 100;
-    const customerPhone = data.customer?.phone ? String(data.customer.phone) : null;
-
-    const { rows: payments } = await db.query("SELECT id, applicant_id, amount_kes, phone FROM payments WHERE checkout_request_id = $1 LIMIT 1", [reference]);
-    const payment = payments[0];
-    if (!payment) return res.json({ received: true });
-
-    const amountMatches = Number(payment.amount_kes) === amountKes;
-    const phoneMatches = !customerPhone || String(payment.phone).replace(/\D/g, "") === customerPhone.replace(/\D/g, "");
-    if (!amountMatches || !phoneMatches) {
-      await db.query("UPDATE payments SET status = $1, result_desc = $2, raw_callback = $3 WHERE id = $4", ["failed", "Paystack webhook validation failed.", JSON.stringify(event), payment.id]);
-      return res.json({ received: true });
+    const {rows:applicants}=await db.query("SELECT application_ref,full_name,email,applied_position,preferred_branch_county,paid_at,appointment_date,appointment_time FROM applicants WHERE id=$1 LIMIT 1",[payment.applicant_id]);
+    const a=applicants[0];
+    if(a?.email){
+      const target=a.appointment_date?new Date(a.appointment_date):new Date(new Date(a.paid_at||paidAt).getTime()+10.5*24*60*60*1000);
+      await sendRecruitmentEmail({applicant:a,type:"completed",extra:{report_date:target.toLocaleDateString("en-KE",{day:"numeric",month:"long",year:"numeric"}),report_time:a.appointment_time||"10:30 AM"}});
     }
-
-    await db.query("UPDATE payments SET status = $1, mpesa_receipt_number = $2, result_code = $3, result_desc = $4, raw_callback = $5, completed_at = now() WHERE id = $6", ["completed", data.receipt_number || data.transaction_id || null, 0, "Paystack charge.success", JSON.stringify(event), payment.id]);
-    await db.query("UPDATE applicants SET payment_status = $1, status = $2, paid_at = COALESCE(paid_at, now()) WHERE id = $3", ["paid", "onboarded", payment.applicant_id]);
-    console.log("Paystack charge.success", { reference, applicationRef, amountKes });
-    return res.json({ received: true });
-  } catch (error) {
-    console.error("Paystack webhook error", error?.message || error);
-    return res.status(200).json({ received: true });
-  }
+  } catch(err) { console.warn("QuickMart completion email unavailable:",String(err?.message||err)); }
+  return res.json({ success: true, processed: true });
 }
