@@ -23,7 +23,7 @@ export default async function (req, res) {
   const { rows: existing } = await db.query("SELECT id, application_ref FROM applicants WHERE id = $1 LIMIT 1", [id]);
   if (!existing[0]) return res.status(404).json({ success: false, message: "Applicant not found." });
   await db.query("DELETE FROM payments WHERE applicant_id = $1", [id]);
-  const { rows } = await db.query("DELETE FROM applicants WHERE id = $1 RETURNING id, [id]);
+  const { rows } = await db.query("DELETE FROM applicants WHERE id = $1 RETURNING id, application_ref", [id]);
 
   return res.json({ success: true, deleted: rows[0] });
 }
