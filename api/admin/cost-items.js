@@ -5,7 +5,7 @@ export const methods = ["GET", "POST", "PUT", "DELETE"];
 
 export default async function (req, res) {
   if (req.method === "GET") {
-    const { rows } = await db.query("SELECT id, name, description, price_kes, is_required, active FROM cost_items ORDER BY is_required DESC, name ASC");
+    const { rows } = await db.query("SELECT id, name, description, price_kes, is_required, active FROM cost_items WHERE active = true ORDER BY is_required DESC, name ASC");
     return res.json({ success: true, items: rows });
   }
   const body = req.body || {};
