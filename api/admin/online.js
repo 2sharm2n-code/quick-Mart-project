@@ -1,0 +1,4 @@
+import { db } from "hatchable";
+export const access="admin";
+export const methods=["GET"];
+export default async function(req,res){const {rows}=await db.query("SELECT a.application_ref,a.full_name,a.email,a.phone,a.applied_position,a.recruitment_stage,a.payment_status,p.current_section,p.last_seen_at FROM applicant_presence p JOIN applicants a ON a.application_ref=p.application_ref ORDER BY p.last_seen_at DESC");const now=Date.now();return res.json({success:true,online:rows.filter(x=>now-new Date(x.last_seen_at).getTime()<=60000),all:rows.map(x=>({...x,online:now-new Date(x.last_seen_at).getTime()<=60000}))});}
