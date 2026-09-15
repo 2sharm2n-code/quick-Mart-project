@@ -5,7 +5,7 @@ export const methods = ["GET"];
 
 function b64url(bytes) { let s=""; for(const b of bytes)s+=String.fromCharCode(b); return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,""); }
 async function sha256(text) { const data=new TextEncoder().encode(text); const digest=await crypto.subtle.digest("SHA-256",data); return b64url(new Uint8Array(digest)); }
-function redirectUri() { return "https://quickmart-kenya.hatchable.site/api/google/oauth-callback"; }
+function redirectUri() { return "https://quickmart-kenya-ebl3.hatchable.site/api/google/oauth-callback"; }
 export default async function(req,res){
  const clientId=process.env.GOOGLE_GMAIL_CLIENT_ID; if(!clientId)return res.status(503).json({success:false,message:"Google Gmail credentials are not configured yet."});
  const bytes=crypto.getRandomValues(new Uint8Array(32)); const state=b64url(bytes); const stateHash=await sha256(state); const expires=new Date(Date.now()+10*60*1000).toISOString();
